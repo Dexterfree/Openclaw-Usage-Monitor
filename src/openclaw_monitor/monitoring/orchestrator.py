@@ -101,6 +101,8 @@ class MonitorOrchestrator:
             self._run_daily()
         elif self.settings.view == "monthly":
             self._run_monthly()
+        elif self.settings.view == "detailed":
+            self._run_detailed()
 
     def _load_data(self) -> None:
         """Load usage data from log files."""
@@ -167,7 +169,11 @@ class MonitorOrchestrator:
             token_limit=self._token_limit,
         )
 
-        input("Press Enter to exit...")
+        # Only wait for input if running interactively
+        try:
+            input("Press Enter to exit...")
+        except (EOFError, OSError):
+            pass
 
     def _run_monthly(self) -> None:
         """Run the monthly report view."""
@@ -182,7 +188,31 @@ class MonitorOrchestrator:
             token_limit=self._token_limit,
         )
 
-        input("Press Enter to exit...")
+        # Only wait for input if running interactively
+        try:
+            input("Press Enter to exit...")
+        except (EOFError, OSError):
+            pass
+
+    def _run_detailed(self) -> None:
+        """Run the detailed breakdown view."""
+        logger.info("Displaying detailed breakdown")
+
+        # Use last 7 days of data for detailed view
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        recent_entries = [e for e in self._entries if e.timestamp >= cutoff]
+
+        self.display_controller.display_detailed(
+            entries=recent_entries,
+            token_limit=self._token_limit,
+        )
+
+        # Only wait for input if running interactively
+        try:
+            input("Press Enter to exit...")
+        except (EOFError, OSError):
+            # Non-interactive environment, just exit
+            pass
 
     def _check_warnings(self) -> None:
         """Check for usage warnings and display them."""

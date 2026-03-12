@@ -425,3 +425,149 @@ def calculate_daily_average(
         cache_read_tokens=total_cache_read // count,
         count=total_requests // count if count > 0 else 0,
     )
+
+
+def aggregate_by_hour(
+    entries: List[UsageEntry],
+    timezone_str: str = "UTC",
+) -> List[AggregatedPeriod]:
+    """
+    Aggregate usage entries by hour.
+
+    Args:
+        entries: List of UsageEntry objects
+        timezone_str: Timezone to use for hour grouping
+
+    Returns:
+        List of AggregatedPeriod objects, one per hour
+    """
+    if not entries:
+        return []
+
+    try:
+        import pytz
+        tz_obj = pytz.timezone(timezone_str)
+    except ImportError:
+        tz_obj = timezone.utc
+
+    # Group entries by hour
+    hourly_groups: Dict[str, List[UsageEntry]] = defaultdict(list)
+
+    for entry in entries:
+        localized = entry.timestamp.astimezone(tz_obj)
+        hour_key = localized.strftime("%Y-%m-%d %H:00")
+        hourly_groups[hour_key].append(entry)
+
+    # Create aggregated periods
+    periods = []
+    for hour_key, hour_entries in sorted(hourly_groups.items()):
+        stats = AggregatedStats(
+            input_tokens=sum(e.input_tokens for e in hour_entries),
+            output_tokens=sum(e.output_tokens for e in hour_entries),
+            cache_creation_tokens=sum(e.cache_creation_tokens for e in hour_entries),
+            cache_read_tokens=sum(e.cache_read_tokens for e in hour_entries),
+            count=len(hour_entries),
+        )
+
+        models_used = {e.model or "unknown" for e in hour_entries}
+
+        # Model breakdowns
+        model_breakdowns: Dict[str, AggregatedStats] = {}
+        for model in models_used:
+            model_entries = [e for e in hour_entries if (e.model or "unknown") == model]
+            model_breakdowns[model] = AggregatedStats(
+                input_tokens=sum(e.input_tokens for e in model_entries),
+                output_tokens=sum(e.output_tokens for e in model_entries),
+                cache_creation_tokens=sum(e.cache_creation_tokens for e in model_entries),
+                cache_read_tokens=sum(e.cache_read_tokens for e in model_entries),
+                count=len(model_entries),
+            )
+
+        periods.append(AggregatedPeriod(
+            period_key=hour_key,
+            stats=stats,
+            models_used=models_used,
+            model_breakdowns=model_breakdowns,
+        ))
+
+    return periods
+
+
+def get_model_breakdown_details(
+    entries: List[UsageEntry],
+) -> List[Tuple[str, AggregatedStats, float]]:
+    """
+    Get detailed breakdown by model with percentages.
+
+    Args:
+        entries: List of UsageEntry objects
+
+    Returns:
+        List of (model_name, stats, percentage) tuples sorted by tokens descending
+    """
+    model_stats = aggregate_by_model(entries)
+    total = sum(s.total_tokens for s in model_stats.values())
+
+    sorted_models = sorted(
+        model_stats.items(),
+        key=lambda x: x[1].total_tokens,
+        reverse=True,
+    )
+
+    result = []
+    for model, stats in sorted_models:
+        percentage = (stats.total_tokens / total * 100) if total > 0 else 0
+        result.append((model, stats, percentage))
+
+    return result
+
+
+def get_provider_breakdown_details(
+    entries: List[UsageEntry],
+) -> List[Tuple[str, AggregatedStats, float]]:
+    """
+    Get detailed breakdown by provider with percentages.
+
+    Args:
+        entries: List of UsageEntry objects
+
+    Returns:
+        List of (provider_name, stats, percentage) tuples sorted by tokens descending
+    """
+    provider_stats = aggregate_by_provider(entries)
+    total = sum(s.total_tokens for s in provider_stats.values())
+
+    sorted_providers = sorted(
+        provider_stats.items(),
+        key=lambda x: x[1].total_tokens,
+        reverse=True,
+    )
+
+    result = []
+    for provider, stats in sorted_providers:
+        percentage = (stats.total_tokens / total * 100) if total > 0 else 0
+        result.append((provider, stats, percentage))
+
+    return result
+
+
+def get_token_type_breakdown(
+    entries: List[UsageEntry],
+) -> Dict[str, int]:
+    """
+    Get breakdown of token types across all entries.
+
+    Args:
+        entries: List of UsageEntry objects
+
+    Returns:
+        Dictionary with token type counts
+    """
+    return {
+        "input_tokens": sum(e.input_tokens for e in entries),
+        "output_tokens": sum(e.output_tokens for e in entries),
+        "cache_creation_tokens": sum(e.cache_creation_tokens for e in entries),
+        "cache_read_tokens": sum(e.cache_read_tokens for e in entries),
+        "total_cached": sum(e.cache_creation_tokens + e.cache_read_tokens for e in entries),
+        "total_non_cached": sum(e.input_tokens + e.output_tokens for e in entries),
+    }

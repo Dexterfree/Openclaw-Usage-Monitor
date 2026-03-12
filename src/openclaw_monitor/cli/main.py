@@ -15,6 +15,8 @@ from openclaw_monitor.core.settings import MonitorSettings, get_app_config, rese
 from openclaw_monitor.monitoring.orchestrator import MonitorOrchestrator
 from openclaw_monitor._version import __version__
 from rich.console import Console
+import sys
+import io
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -54,7 +56,7 @@ Examples:
     # View mode
     parser.add_argument(
         "--view",
-        choices=["realtime", "daily", "monthly"],
+        choices=["realtime", "daily", "monthly", "detailed"],
         default="realtime",
         help="View mode for displaying usage data (default: realtime)",
     )
@@ -177,6 +179,36 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     )
 
 
+def create_console() -> Console:
+    """
+    Create a Rich Console with proper UTF-8 encoding for Windows.
+
+    Returns:
+        Configured Console instance
+    """
+    # On Windows, configure UTF-8 encoding for emoji support
+    if sys.platform == "win32":
+        try:
+            # Try to set console to UTF-8 mode
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            # Fallback: wrap stdout in a UTF-8 text wrapper
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout = io.TextIOWrapper(
+                    sys.stdout.buffer, encoding="utf-8", errors="replace", newline=None
+                )
+            if hasattr(sys.stderr, "buffer"):
+                sys.stderr = io.TextIOWrapper(
+                    sys.stderr.buffer, encoding="utf-8", errors="replace", newline=None
+                )
+
+    return Console(
+        force_terminal=True,
+        legacy_windows=False,  # Disable legacy Windows rendering
+    )
+
+
 def validate_args(args: argparse.Namespace) -> List[str]:
     """
     Validate command-line arguments.
@@ -258,10 +290,12 @@ def main() -> int:
     # Setup logging
     setup_logging(debug=args.debug, verbose=args.verbose)
 
+    # Create console with proper UTF-8 encoding
+    console = create_console()
+
     # Validate arguments
     errors = validate_args(args)
     if errors:
-        console = Console()
         for error in errors:
             console.print(f"[red]Error:[/] {error}")
         return 1
@@ -270,13 +304,10 @@ def main() -> int:
     try:
         settings = create_settings_from_args(args)
     except Exception as e:
-        console = Console()
         console.print(f"[red]Configuration Error:[/] {e}")
         return 1
 
     # Create and run monitor
-    console = Console()
-
     try:
         orchestrator = MonitorOrchestrator(
             settings=settings,

@@ -55,7 +55,6 @@ notifications = [
 
 [project.scripts]
 openclaw-monitor = "openclaw_monitor.cli.main:main"
-openclaw-monitor = "openclaw_monitor.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/openclaw/openclaw-monitor"

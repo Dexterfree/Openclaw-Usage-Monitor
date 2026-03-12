@@ -18,3 +18,20 @@ __all__ = [
     "GenericParser",
     "OpenCLAWParser",
 ]
+
+# Clawdbot parser is optional - only import if available
+try:
+    from openclaw_monitor.data.parsers.clawdbot import (
+        ClawdbotLogParser,
+        parse_clawdbot_directory,
+        extract_token_usage_from_logs,
+        register_clawdbot_parser,
+    )
+    __all__.extend([
+        "ClawdbotLogParser",
+        "parse_clawdbot_directory",
+        "extract_token_usage_from_logs",
+        "register_clawdbot_parser",
+    ])
+except ImportError:
+    pass

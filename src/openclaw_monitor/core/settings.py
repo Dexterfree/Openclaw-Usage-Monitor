@@ -20,6 +20,7 @@ class ViewMode(str, Enum):
     REALTIME = "realtime"
     DAILY = "daily"
     MONTHLY = "monthly"
+    DETAILED = "detailed"
 
 
 class TokenPlan(str, Enum):
@@ -41,7 +42,7 @@ class MonitorSettings(BaseModel):
     """
 
     # View configuration
-    view: Literal["realtime", "daily", "monthly"] = Field(
+    view: Literal["realtime", "daily", "monthly", "detailed"] = Field(
         default="realtime",
         description="View mode for displaying usage data",
     )
@@ -103,6 +104,12 @@ class MonitorSettings(BaseModel):
         ge=0.0,
         le=100.0,
         description="Percentage threshold for showing critical warnings",
+    )
+
+    # UI configuration
+    color_scheme: Literal["auto", "light", "dark"] = Field(
+        default="auto",
+        description="Color scheme for UI",
     )
 
     @field_validator("custom_limit_tokens")
@@ -181,12 +188,6 @@ class AppConfig(BaseSettings):
     terminal_width: Optional[int] = Field(
         default=None,
         description="Override terminal width detection",
-    )
-
-    # Color scheme
-    color_scheme: Literal["auto", "light", "dark"] = Field(
-        default="auto",
-        description="Color scheme for UI",
     )
 
 

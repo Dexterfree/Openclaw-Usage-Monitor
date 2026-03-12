@@ -218,3 +218,204 @@ def create_model_breakdown_table(
         )
 
     return table
+
+
+def create_hourly_table(
+    periods: List[AggregatedPeriod],
+    timezone_str: str = "UTC",
+) -> Table:
+    """
+    Create a table showing hourly token usage.
+
+    Args:
+        periods: List of hourly AggregatedPeriod objects
+        timezone_str: Timezone for display
+
+    Returns:
+        Rich Table object
+    """
+    table = Table(
+        title="Hourly Token Usage",
+        show_header=True,
+        header_style="bold cyan",
+        border_style="dim cyan",
+    )
+
+    table.add_column("Time", style="white", width=16)
+    table.add_column("Total", justify="right", style="white", width=12)
+    table.add_column("Input", justify="right", style="green", width=10)
+    table.add_column("Output", justify="right", style="blue", width=10)
+    table.add_column("Cache R", justify="right", style="cyan", width=10)
+    table.add_column("Cache W", justify="right", style="magenta", width=10)
+    table.add_column("Reqs", justify="right", style="dim", width=6)
+    table.add_column("Models", style="yellow", width=25)
+
+    for period in periods:
+        # Get top models for this hour
+        model_items = sorted(
+            period.model_breakdowns.items(),
+            key=lambda x: x[1].total_tokens,
+            reverse=True,
+        )[:2]
+
+        top_models = ", ".join([m for m, _ in model_items]) if model_items else "-"
+
+        table.add_row(
+            period.period_key,
+            format_number(period.stats.total_tokens),
+            format_number(period.stats.input_tokens),
+            format_number(period.stats.output_tokens),
+            format_number(period.stats.cache_read_tokens),
+            format_number(period.stats.cache_creation_tokens),
+            str(period.stats.count),
+            top_models,
+        )
+
+    return table
+
+
+def create_detailed_model_table(
+    model_breakdown: List[tuple],
+    total_tokens: int,
+) -> Table:
+    """
+    Create a detailed table showing model breakdown with all metrics.
+
+    Args:
+        model_breakdown: List of (model, stats, percentage) tuples
+        total_tokens: Total tokens for percentage calculation
+
+    Returns:
+        Rich Table object
+    """
+    table = Table(
+        title="Model Detailed Breakdown",
+        show_header=True,
+        header_style="bold cyan",
+        border_style="dim cyan",
+    )
+
+    table.add_column("Model", style="yellow", width=30)
+    table.add_column("Total", justify="right", style="white", width=14)
+    table.add_column("%", justify="right", style="cyan", width=8)
+    table.add_column("Input", justify="right", style="green", width=12)
+    table.add_column("Output", justify="right", style="blue", width=12)
+    table.add_column("Cache R", justify="right", style="cyan", width=10)
+    table.add_column("Cache W", justify="right", style="magenta", width=10)
+    table.add_column("Reqs", justify="right", style="dim", width=8)
+    table.add_column("I/O Ratio", justify="right", style="white", width=10)
+
+    for model, stats, percentage in model_breakdown:
+        io_ratio = stats.output_ratio if stats.input_tokens > 0 else 0
+
+        table.add_row(
+            model,
+            format_number(stats.total_tokens),
+            format_percentage(percentage),
+            format_number(stats.input_tokens),
+            format_number(stats.output_tokens),
+            format_number(stats.cache_read_tokens),
+            format_number(stats.cache_creation_tokens),
+            str(stats.count),
+            f"{io_ratio:.2f}",
+        )
+
+    return table
+
+
+def create_provider_table(
+    provider_breakdown: List[tuple],
+    total_tokens: int,
+) -> Table:
+    """
+    Create a table showing breakdown by provider.
+
+    Args:
+        provider_breakdown: List of (provider, stats, percentage) tuples
+        total_tokens: Total tokens for percentage calculation
+
+    Returns:
+        Rich Table object
+    """
+    table = Table(
+        title="Provider Breakdown",
+        show_header=True,
+        header_style="bold cyan",
+        border_style="dim cyan",
+    )
+
+    table.add_column("Provider", style="yellow", width=20)
+    table.add_column("Total", justify="right", style="white", width=14)
+    table.add_column("%", justify="right", style="cyan", width=8)
+    table.add_column("Input", justify="right", style="green", width=12)
+    table.add_column("Output", justify="right", style="blue", width=12)
+    table.add_column("Cache", justify="right", style="cyan", width=12)
+    table.add_column("Reqs", justify="right", style="dim", width=8)
+
+    for provider, stats, percentage in provider_breakdown:
+        table.add_row(
+            provider,
+            format_number(stats.total_tokens),
+            format_percentage(percentage),
+            format_number(stats.input_tokens),
+            format_number(stats.output_tokens),
+            format_number(stats.cache_read_tokens + stats.cache_creation_tokens),
+            str(stats.count),
+        )
+
+    return table
+
+
+def create_token_type_table(
+    token_breakdown: Dict[str, int],
+    total_tokens: int,
+) -> Table:
+    """
+    Create a table showing breakdown by token type.
+
+    Args:
+        token_breakdown: Dictionary with token type counts
+        total_tokens: Total tokens for percentage calculation
+
+    Returns:
+        Rich Table object
+    """
+    table = Table(
+        title="Token Type Breakdown",
+        show_header=True,
+        header_style="bold cyan",
+        border_style="dim cyan",
+    )
+
+    table.add_column("Token Type", style="cyan", width=20)
+    table.add_column("Count", justify="right", style="white", width=16)
+    table.add_column("Percentage", justify="right", style="yellow", width=12)
+    table.add_column("Description", style="dim", width=40)
+
+    token_types = [
+        ("Input Tokens", token_breakdown.get("input_tokens", 0), "Tokens sent to the LLM"),
+        ("Output Tokens", token_breakdown.get("output_tokens", 0), "Tokens generated by the LLM"),
+        ("Cache Read", token_breakdown.get("cache_read_tokens", 0), "Tokens read from prompt cache"),
+        ("Cache Write", token_breakdown.get("cache_creation_tokens", 0), "Tokens written to prompt cache"),
+    ]
+
+    for name, count, description in token_types:
+        percentage = (count / total_tokens * 100) if total_tokens > 0 else 0
+
+        # Color coding
+        style_map = {
+            "Input Tokens": "green",
+            "Output Tokens": "blue",
+            "Cache Read": "cyan",
+            "Cache Write": "magenta",
+        }
+        style = style_map.get(name, "white")
+
+        table.add_row(
+            f"[{style}]{name}[/{style}]",
+            format_number(count),
+            format_percentage(percentage),
+            description,
+        )
+
+    return table

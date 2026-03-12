@@ -20,7 +20,14 @@ from openclaw_monitor.core.plans import (
     get_percentage_used,
     get_tokens_remaining,
 )
-from openclaw_monitor.data.aggregator import AggregatedPeriod, get_total_stats
+from openclaw_monitor.data.aggregator import (
+    AggregatedPeriod,
+    get_total_stats,
+    aggregate_by_hour,
+    get_model_breakdown_details,
+    get_provider_breakdown_details,
+    get_token_type_breakdown,
+)
 from openclaw_monitor.data.analyzer import SessionAnalyzer
 from openclaw_monitor.data.analysis import UsageAnalysis
 from openclaw_monitor.terminal.themes import Theme, get_theme
@@ -40,6 +47,10 @@ from openclaw_monitor.ui.table_views import (
     create_model_breakdown_table,
     create_monthly_table,
     create_summary_table,
+    create_hourly_table,
+    create_detailed_model_table,
+    create_provider_table,
+    create_token_type_table,
 )
 
 logger = logging.getLogger(__name__)
@@ -193,6 +204,66 @@ class DisplayController:
         self.console.print(summary_table)
         self.console.print()
         self.console.print(monthly_table)
+
+    def display_detailed(
+        self,
+        entries: List[UsageEntry],
+        token_limit: int,
+    ) -> None:
+        """
+        Display detailed breakdown view.
+
+        Shows:
+        - Hourly usage breakdown
+        - Detailed model breakdown
+        - Provider breakdown
+        - Token type breakdown
+
+        Args:
+            entries: List of UsageEntry objects
+            token_limit: Token limit for the period
+        """
+        analysis = UsageAnalysis(entries, self.timezone_str)
+        total_tokens = analysis.total_stats.total_tokens
+
+        # Create summary
+        summary_data = {
+            "total_tokens": total_tokens,
+            "input_tokens": analysis.total_stats.input_tokens,
+            "output_tokens": analysis.total_stats.output_tokens,
+            "cache_percentage": analysis.total_stats.cache_percentage,
+            "count": analysis.total_stats.count,
+        }
+
+        period_info = {
+            "name": "Detailed Breakdown",
+            "duration_hours": analysis.duration_hours,
+        }
+
+        # Get detailed breakdowns
+        hourly_periods = aggregate_by_hour(entries, self.timezone_str)
+        model_breakdown = get_model_breakdown_details(entries)
+        provider_breakdown = get_provider_breakdown_details(entries)
+        token_breakdown = get_token_type_breakdown(entries)
+
+        # Create tables
+        summary_table = create_summary_table(summary_data, period_info, self.timezone_str)
+        hourly_table = create_hourly_table(hourly_periods[-24:], self.timezone_str)  # Last 24 hours
+        model_table = create_detailed_model_table(model_breakdown, total_tokens)
+        provider_table = create_provider_table(provider_breakdown, total_tokens)
+        token_type_table = create_token_type_table(token_breakdown, total_tokens)
+
+        # Display
+        self.console.clear()
+        self.console.print(summary_table)
+        self.console.print()
+        self.console.print(hourly_table)
+        self.console.print()
+        self.console.print(model_table)
+        self.console.print()
+        self.console.print(provider_table)
+        self.console.print()
+        self.console.print(token_type_table)
 
     def display_error(self, message: str) -> None:
         """
